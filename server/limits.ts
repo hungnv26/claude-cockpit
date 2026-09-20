@@ -64,8 +64,13 @@ function parseLimits(data: any): UsageLimit[] {
   return out
 }
 
-/** The usage endpoint rate-limits; on a 429 skip polling for this long. */
+/**
+ * The usage endpoint rate-limits, and has been seen asking for a 50-minute
+ * wait. Honour its `retry-after` (capped), falling back to this when absent —
+ * re-polling early only extends the lockout.
+ */
 const RATE_LIMIT_BACKOFF_MS = 3 * 60 * 1000
+const RATE_LIMIT_MAX_MS = 60 * 60 * 1000
 
 export class Limits {
   private view: LimitsView = {
@@ -109,9 +114,9 @@ export class Limits {
   }
 
   /** Transient failures (429, network, 5xx) — keep showing the last-good gauges. */
-  private softFail(): boolean {
+  private softFail(detail = 'usage temporarily unavailable'): boolean {
     if (this.lastGood.length === 0) {
-      return this.set({ state: 'error', detail: 'usage temporarily unavailable', limits: [], fetchedAt: Date.now() })
+      return this.set({ state: 'error', detail, limits: [], fetchedAt: Date.now() })
     }
     // Slightly stale but valid; a kiosk should keep displaying it.
     return this.set({ state: 'ok', detail: null, limits: this.lastGood, fetchedAt: this.view.fetchedAt })
@@ -158,8 +163,10 @@ export class Limits {
         return this.hardFail('expired', 'Rejected by the API. Run `claude auth login`.')
       }
       if (res.status === 429) {
-        this.backoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS
-        return this.softFail()
+        const retryAfter = Number(res.headers.get('retry-after')) * 1000
+        const wait = Math.min(RATE_LIMIT_MAX_MS, Math.max(RATE_LIMIT_BACKOFF_MS, retryAfter || 0))
+        this.backoffUntil = Date.now() + wait
+        return this.softFail(`usage rate-limited · retry in ${Math.ceil(wait / 60000)}m`)
       }
       if (!res.ok) {
         return this.softFail()
