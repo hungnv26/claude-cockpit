@@ -20,11 +20,31 @@ export interface UsageSnapshot {
   lastActivity: number | null
 }
 
+export interface ContextItem {
+  key: string
+  label: string
+  tokens: number
+}
+
+/**
+ * Where the context window went, by category. Fixed rows come from a
+ * `claude -p /context` probe in the session's cwd; `Messages` is the real
+ * token count minus that overhead. Free space is left to the client.
+ */
+export interface ContextBreakdown {
+  items: ContextItem[]
+  /** Tokens Claude Code reserves before auto-compacting. */
+  autocompact: number
+  estimatedAt: number
+}
+
 export interface SessionView extends SessionMeta {
   alive: boolean
   transcriptPath: string | null
   title: string | null
   usage: UsageSnapshot | null
+  /** null until the cwd has been probed. */
+  context: ContextBreakdown | null
   /** Set by hooks: this session is blocked on the human. */
   attention: 'permission' | 'idle' | 'done' | null
 }

@@ -11,6 +11,18 @@ export interface UsageSnapshot {
 
 export type Attention = 'permission' | 'idle' | 'done' | null
 
+export interface ContextItem {
+  key: string
+  label: string
+  tokens: number
+}
+
+export interface ContextBreakdown {
+  items: ContextItem[]
+  autocompact: number
+  estimatedAt: number
+}
+
 export interface SessionView {
   pid: number
   sessionId: string
@@ -24,6 +36,7 @@ export interface SessionView {
   transcriptPath: string | null
   title: string | null
   usage: UsageSnapshot | null
+  context: ContextBreakdown | null
   attention: Attention
 }
 

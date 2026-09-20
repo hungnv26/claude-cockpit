@@ -3,7 +3,7 @@ import { SessionCard } from './components/SessionCard.tsx'
 import { Density } from './components/Density.tsx'
 import { LimitsHero } from './components/LimitsHero.tsx'
 import { StatusBar, type Focus } from './components/StatusBar.tsx'
-import { Feed } from './components/Feed.tsx'
+import { ContextPanel } from './components/ContextPanel.tsx'
 import { Console } from './components/Console.tsx'
 import { Permissions } from './components/Permissions.tsx'
 import { beep, unlockAudio } from './alert.ts'
@@ -26,11 +26,11 @@ type View = 'monitor' | 'console'
 const LAYOUT_KEY = 'cockpit.layout'
 type Layout = 'ipad' | 'iphone'
 
-/** Portrait stacks everything, so cap the session list to leave room for the feed. */
+/** Portrait stacks everything, so cap the session list to leave room for the context panel. */
 const PORTRAIT_SESSIONS = 2
 
 export function App() {
-  const { sessions, agents, permissions, events, limits, connected, authError } = useCockpit()
+  const { sessions, agents, permissions, limits, connected, authError } = useCockpit()
   const now = useClock(1000)
   const [sound, setSound] = useState(() => localStorage.getItem(SOUND_KEY) === '1')
   const [view, setView] = useState<View>(
@@ -186,7 +186,7 @@ export function App() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {/* Only the 2 most recent, so the activity feed still fits on screen. */}
+                {/* Only the 2 most recent, so the context panel still fits on screen. */}
                 {sessions.slice(0, PORTRAIT_SESSIONS).map((s) => (
                   <SessionCard key={s.sessionId} session={s} now={now} compact />
                 ))}
@@ -198,10 +198,10 @@ export function App() {
               </div>
             )}
           </div>
-          <Feed events={events} now={now} block />
+          <ContextPanel session={focusSession ?? null} block />
         </div>
       ) : (
-        // Landscape: gauges over a two-column [sessions | feed].
+        // Landscape: gauges over a two-column [sessions | context breakdown].
         <div className="flex-1 flex flex-col min-h-0">
           <LimitsHero limits={limits} now={now} />
           <div className="flex-1 flex min-h-0 border-t border-ink-line">
@@ -218,7 +218,7 @@ export function App() {
                 </div>
               )}
             </main>
-            <Feed events={events} now={now} />
+            <ContextPanel session={focusSession ?? null} />
           </div>
         </div>
       )}

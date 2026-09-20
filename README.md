@@ -40,8 +40,10 @@ The **monitor** view is a read-only glance board:
   you approach the ceiling.
 - **Live sessions** — every running Claude Code session (including ones started
   by the desktop app), with its model and state.
-- **Activity feed** — a running log of session events (turn finished, needs
-  approval, went idle) pushed in real time.
+- **Context breakdown** — where the focused session's context window has gone,
+  the way the desktop app's "Context window" popover shows it: messages, MCP
+  tools, system tools, skills, system prompt, with the small rows folded into
+  *Other*, plus the autocompact buffer and free space.
 - **Status footer** — a persistent `LIVE / OFFLINE` indicator, the focused
   session's model and effort, and a full-width **Context Window** bar showing how
   full the current context is.
@@ -62,8 +64,8 @@ tablet on landscape — then remembers your choice.
 | | iPad (landscape) | iPhone (portrait) |
 |---|---|---|
 | Gauges | full size, in a row | smaller, three across |
-| Body | sessions ∣ activity feed, side by side | stacked: sessions, then the feed |
-| Sessions | all of them | the 2 most recent, so the feed stays on screen |
+| Body | sessions ∣ context breakdown, side by side | stacked: sessions, then the breakdown |
+| Sessions | all of them | the 2 most recent, so the breakdown stays on screen |
 | Width | fills the screen | a phone-width column, centred on wider screens |
 
 Both respect the iOS safe-area insets, so the header clears the notch and the
@@ -106,6 +108,11 @@ and (optionally) drives new sessions it spawns itself. There are two planes:
   stale (see Design notes).
 - **Context window** — the current context vs. the model's real window, pulled
   live from the Models API (`max_input_tokens`), not a hardcoded number.
+- **Context breakdown** — Claude Code never writes its per-category estimate to
+  disk, so the server asks the CLI: `claude -p /context` in the session's cwd
+  reports the fixed overhead (system prompt, tools, skills, memory, agents) for
+  that project without making an API call. Cached per cwd for 15 minutes.
+  *Messages* is the real token count from the transcript minus that overhead.
 
 ### Control plane (drives sessions the app owns)
 
@@ -118,8 +125,8 @@ they also show up on the monitor like any other session.
 ### Notifications
 
 A set of Claude Code **hooks** (`Notification`, `Stop`, `UserPromptSubmit`) POST
-to the server, which drives the activity feed, the "needs you" indicators, and an
-in-page sound alert. (Web Push isn't available on Safari 15, so alerts are
+to the server, which drives the "needs you" indicators and an in-page sound
+alert. (Web Push isn't available on Safari 15, so alerts are
 in-page.)
 
 ---
@@ -172,17 +179,18 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
   limits.ts          plan-usage gauges (5h / 7d / Fable) from the usage API
   credential.ts      Keychain read + self-refreshing OAuth token
   models.ts          live context-window sizes from the Models API
+  context.ts         per-cwd `claude -p /context` probe → context breakdown
   agent.ts / agents.ts   spawns and drives owned Claude Code sessions
   permissions.ts     holds tool calls for iPad approval
   index.ts           HTTP/WS server, token gate, control endpoints
 
 src/               React + Tailwind frontend
   App.tsx            layout + view switching
-  components/        LimitsHero, StatusBar, SessionCard, Feed, Console, …
+  components/        LimitsHero, StatusBar, SessionCard, ContextPanel, Console, …
   ws.ts              WebSocket hook + shared types
 
 hooks/             Claude Code hooks that POST to the server
-  notify.mjs         Notification / Stop / UserPromptSubmit → activity feed
+  notify.mjs         Notification / Stop / UserPromptSubmit → attention state
   permission.mjs     PreToolUse → iPad allow/deny
 
 service/           launchd launcher (run.sh) + logs
@@ -208,6 +216,12 @@ Claude Code actually behaves (each verified against the real CLI, not assumed):
   write-back merges only the account fields.
 - **Context windows are fetched, never hardcoded.** Nearly every current model is
   **1M** tokens, not 200k — hardcoding 200k under-reported Opus by 5×.
+- **The context breakdown is a probe, not a parse.** The category split lives
+  only inside the CLI process, so the server runs `claude -p /context` per cwd
+  (about a second, no API call) and deletes the empty transcript it leaves
+  behind. A plain CLI doesn't load the desktop app's extra tools, so the tool
+  rows run a little low for desktop sessions and the difference lands in
+  *Messages* — the total always matches the real count.
 - **Effort can't be changed live** (`set_model` works as a control request but
   `set_effort` doesn't exist), so the effort control restarts the session with
   `--resume`, which preserves the conversation.

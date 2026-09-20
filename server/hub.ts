@@ -5,6 +5,7 @@ import { Limits } from './limits.ts'
 import { ModelCatalog } from './models.ts'
 import { AgentRegistry } from './agents.ts'
 import { PermissionBroker } from './permissions.ts'
+import { ContextProbe } from './context.ts'
 import type { SessionView, ServerMessage } from './types.ts'
 
 /**
@@ -25,6 +26,7 @@ export class Hub {
   readonly permissions = new PermissionBroker(() => this.broadcast())
   private limits = new Limits()
   private catalog = new ModelCatalog()
+  private context = new ContextProbe(() => this.schedule())
   private listeners = new Set<Listener>()
   private pending: NodeJS.Timeout | null = null
   private stopWatch: (() => void) | null = null
@@ -100,16 +102,21 @@ export class Hub {
     }
     await Promise.all(live.map((m) => this.tailer.track(m.sessionId)))
     this.events.prune(liveIds)
+    this.context.ensure(live.map((m) => m.cwd))
 
     this.snapshot = live
-      .map((m) => ({
-        ...m,
-        alive: true,
-        transcriptPath: this.tailer.transcriptPath(m.sessionId),
-        title: this.tailer.title(m.sessionId),
-        usage: this.tailer.usage(m.sessionId),
-        attention: this.events.attentionFor(m.sessionId),
-      }))
+      .map((m) => {
+        const usage = this.tailer.usage(m.sessionId)
+        return {
+          ...m,
+          alive: true,
+          transcriptPath: this.tailer.transcriptPath(m.sessionId),
+          title: this.tailer.title(m.sessionId),
+          usage,
+          context: this.context.breakdownFor(m.cwd, usage),
+          attention: this.events.attentionFor(m.sessionId),
+        }
+      })
       .sort((a, b) => (b.usage?.lastActivity ?? 0) - (a.usage?.lastActivity ?? 0))
 
     this.broadcast()
