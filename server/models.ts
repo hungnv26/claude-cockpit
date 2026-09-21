@@ -10,6 +10,8 @@ const REFRESH_MS = 24 * 60 * 60 * 1000
  * current model is 1M, not 200k; hardcoding 200k under-reports context by 5x.
  */
 const FALLBACK: Record<string, number> = {
+  'claude-fable-5-1': 1_000_000,
+  'claude-opus-5': 1_000_000,
   'claude-opus-4-8': 1_000_000,
   'claude-opus-4-7': 1_000_000,
   'claude-opus-4-6': 1_000_000,
@@ -25,6 +27,8 @@ const FALLBACK: Record<string, number> = {
 const DEFAULT_LIMIT = 200_000
 
 const LABELS: Record<string, string> = {
+  'claude-fable-5-1': 'Fable 5.1',
+  'claude-opus-5': 'Opus 5',
   'claude-opus-4-8': 'Opus 4.8',
   'claude-opus-4-7': 'Opus 4.7',
   'claude-opus-4-6': 'Opus 4.6',
