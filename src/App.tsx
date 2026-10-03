@@ -237,7 +237,7 @@ export function App() {
         </div>
       )}
 
-      <StatusBar connected={connected} focus={focus} />
+      <StatusBar connected={connected} focus={focus} compact={layout === 'iphone'} />
     </div>
   )
 }

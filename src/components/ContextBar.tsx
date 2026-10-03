@@ -6,6 +6,8 @@ interface Props {
   limit: number
   /** null while the cwd's overhead is still being probed. */
   context: ContextBreakdown | null
+  /** Phone width: smaller legend without percentages, so it wraps to ~3 rows, not 7. */
+  compact?: boolean
 }
 
 /**
@@ -40,7 +42,7 @@ function pct(n: number, limit: number): string {
   return p < 0.95 ? `${p.toFixed(1)}%` : `${Math.round(p)}%`
 }
 
-export function ContextBar({ used, limit, context }: Props) {
+export function ContextBar({ used, limit, context, compact }: Props) {
   const reserve = context?.autocompact ?? 0
   const compactAt = Math.max(0, limit - reserve)
   const share = limit > 0 ? Math.min(1, used / limit) : 0
@@ -101,13 +103,13 @@ export function ContextBar({ used, limit, context }: Props) {
         )}
       </div>
 
-      <ul className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+      <ul className={`flex flex-wrap ${compact ? 'gap-x-4 gap-y-0.5 text-xs' : 'gap-x-6 gap-y-1 text-sm'}`}>
         {rows.map((r) => (
           <li key={r.key} className="flex items-center gap-2 whitespace-nowrap">
             <span className="w-2.5 h-4 rounded-sm shrink-0" style={{ backgroundColor: r.color }} />
             <span className="text-ink-muted">{r.label}</span>
             <span className="text-ink-text tabular-nums">{tokens(r.tokens)}</span>
-            <span className="text-ink-faint tabular-nums">{pct(r.tokens, limit)}</span>
+            {!compact && <span className="text-ink-faint tabular-nums">{pct(r.tokens, limit)}</span>}
           </li>
         ))}
         <li className="flex items-center gap-2 whitespace-nowrap">

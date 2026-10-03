@@ -16,6 +16,8 @@ export interface Focus {
 interface Props {
   connected: boolean
   focus: Focus | null
+  /** Phone layout: compact context legend. */
+  compact?: boolean
 }
 
 function Field({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
@@ -32,7 +34,7 @@ function Field({ label, value, accent }: { label: string; value: string; accent?
  * the segmented context bar with its legend, along the bottom edge. Bottom
  * padding respects the iOS home-indicator safe area.
  */
-export function StatusBar({ connected, focus }: Props) {
+export function StatusBar({ connected, focus, compact }: Props) {
   const hasCtx = focus && focus.contextTokens !== null && focus.contextLimit !== null
 
   return (
@@ -60,7 +62,7 @@ export function StatusBar({ connected, focus }: Props) {
             {focus.title && (
               <>
                 <span className="text-ink-line shrink-0">·</span>
-                <span className="text-ink-faint truncate min-w-0 flex-1">{focus.title}</span>
+                <span className="text-ink-faint truncate min-w-[8rem] flex-1">{focus.title}</span>
               </>
             )}
           </>
@@ -74,6 +76,7 @@ export function StatusBar({ connected, focus }: Props) {
           used={focus!.contextTokens!}
           limit={focus!.contextLimit!}
           context={focus!.context}
+          compact={compact}
         />
       )}
     </div>

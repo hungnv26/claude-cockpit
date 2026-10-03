@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { CLAUDE_BIN } from './agent.ts'
-import { findTranscript } from './transcript.ts'
 import type { ContextBreakdown, ContextItem, UsageSnapshot } from './types.ts'
 
 /**
@@ -24,6 +25,24 @@ const PROBE_TIMEOUT_MS = 30_000
 const PROBE_TTL_MS = 15 * 60 * 1000
 /** Failed probes (no binary, timeout) retry sooner but not on every frame. */
 const PROBE_RETRY_MS = 60 * 1000
+
+/**
+ * Where the probe's own transcript lands: the CLI's config dir, which is not
+ * necessarily the dir the cockpit watches (CLAUDE_COCKPIT_DIR can point elsewhere).
+ */
+const CLI_PROJECTS = path.join(process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude'), 'projects')
+
+async function removeProbeTranscript(sessionId: string): Promise<void> {
+  let dirs: string[]
+  try {
+    dirs = await fs.readdir(CLI_PROJECTS)
+  } catch {
+    return
+  }
+  await Promise.all(
+    dirs.map((d) => fs.rm(path.join(CLI_PROJECTS, d, `${sessionId}.jsonl`), { force: true }).catch(() => {})),
+  )
+}
 
 /** Row order matches the desktop panel; anything unknown sorts after. */
 const ORDER = [
@@ -128,9 +147,8 @@ async function runProbe(t: ProbeTarget): Promise<Omit<Probe, 'probedAt' | 'ok'> 
 
   // Each probe is a real (empty) session and leaves a transcript behind. Remove
   // it so the projects dir doesn't fill with one 9KB file per probe.
-  if (typeof body?.session_id === 'string') {
-    const file = await findTranscript(body.session_id)
-    if (file) await fs.rm(file, { force: true }).catch(() => {})
+  if (typeof body?.session_id === 'string' && /^[\w-]+$/.test(body.session_id)) {
+    await removeProbeTranscript(body.session_id)
   }
 
   return typeof body?.result === 'string' ? parseProbe(body.result) : null
