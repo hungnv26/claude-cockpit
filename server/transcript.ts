@@ -3,7 +3,7 @@ import path from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import chokidar from 'chokidar'
 import { PROJECTS_DIR } from './paths.ts'
-import type { UsageSnapshot } from './types.ts'
+import type { Activity, ToolActivity, UsageSnapshot } from './types.ts'
 
 /**
  * Transcripts run to tens of megabytes. We only ever need the newest assistant
@@ -25,6 +25,73 @@ interface State {
   lastActivity: number | null
   aiTitle: string | null
   customTitle: string | null
+  /** tool_use id → call, until its tool_result lands. */
+  pending: Map<string, ToolActivity>
+  lastTool: ToolActivity | null
+  text: string | null
+  textAt: number | null
+  turnStartedAt: number | null
+  toolCount: number
+}
+
+const MAX_TEXT = 240
+const MAX_DETAIL = 120
+
+function clip(s: string, n: number): string {
+  const flat = s.replace(/\s+/g, ' ').trim()
+  return flat.length > n ? `${flat.slice(0, n)}…` : flat
+}
+
+/** Prose for a glance: drop markdown emphasis, code ticks, headings and bullets. */
+function plain(s: string): string {
+  return s
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/^\s*(#{1,6}|[-*]|\d+\.)\s+/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+}
+
+/** "mcp__Claude_Browser__browser_batch" → "browser_batch". */
+function toolName(name: string): string {
+  const m = /^mcp__.+?__(.+)$/.exec(name)
+  return m ? m[1] : name
+}
+
+/** The one input field that says what a tool call is acting on. */
+function toolDetail(name: string, input: any): string | null {
+  if (!input || typeof input !== 'object') return null
+  const pick = (v: unknown) => (typeof v === 'string' && v.trim() ? clip(v, MAX_DETAIL) : null)
+  const base = (p: unknown) => (typeof p === 'string' ? path.basename(p) : null)
+  switch (name) {
+    case 'Bash':
+      return pick(input.description) ?? pick(String(input.command ?? '').split('\n')[0])
+    case 'Read':
+    case 'Edit':
+    case 'Write':
+    case 'NotebookEdit':
+      return base(input.file_path ?? input.notebook_path)
+    case 'Grep':
+    case 'Glob':
+      return pick(input.pattern)
+    case 'WebFetch':
+      try {
+        return new URL(input.url).host
+      } catch {
+        return pick(input.url)
+      }
+    case 'WebSearch':
+      return pick(input.query)
+    case 'Agent':
+    case 'Task':
+      return pick(input.description)
+    case 'Skill':
+      return pick(input.skill)
+  }
+  for (const v of Object.values(input)) {
+    const d = pick(v)
+    if (d) return d
+  }
+  return null
 }
 
 function newState(file: string, sessionId: string): State {
@@ -41,6 +108,12 @@ function newState(file: string, sessionId: string): State {
     lastActivity: null,
     aiTitle: null,
     customTitle: null,
+    pending: new Map(),
+    lastTool: null,
+    text: null,
+    textAt: null,
+    turnStartedAt: null,
+    toolCount: 0,
   }
 }
 
@@ -76,12 +149,56 @@ function applyLine(st: State, line: string): void {
           st.speed = typeof u.speed === 'string' ? u.speed : null
         }
       }
-      if (e.timestamp) st.lastActivity = Date.parse(e.timestamp)
+      const ts = e.timestamp ? Date.parse(e.timestamp) : Date.now()
+      if (e.timestamp) st.lastActivity = ts
+      // Claude Code writes one content block per line.
+      for (const c of Array.isArray(msg.content) ? msg.content : []) {
+        if (c?.type === 'text' && typeof c.text === 'string' && c.text.trim()) {
+          st.text = clip(plain(c.text), MAX_TEXT)
+          st.textAt = ts
+        } else if (c?.type === 'tool_use' && typeof c.name === 'string') {
+          const call: ToolActivity = {
+            name: toolName(c.name),
+            detail: toolDetail(c.name, c.input),
+            startedAt: ts,
+            running: true,
+          }
+          if (typeof c.id === 'string') st.pending.set(c.id, call)
+          st.lastTool = call
+          st.toolCount++
+        }
+      }
       break
     }
     case 'user': {
       if (e.isSidechain) return
-      if (e.timestamp) st.lastActivity = Date.parse(e.timestamp)
+      const ts = e.timestamp ? Date.parse(e.timestamp) : Date.now()
+      if (e.timestamp) st.lastActivity = ts
+      const content = e.message?.content
+      const blocks: any[] = Array.isArray(content) ? content : []
+      let result = false
+      for (const c of blocks) {
+        if (c?.type === 'tool_result' && typeof c.tool_use_id === 'string') {
+          result = true
+          const call = st.pending.get(c.tool_use_id)
+          if (call) {
+            call.running = false
+            st.pending.delete(c.tool_use_id)
+          }
+        }
+      }
+      // A real prompt opens a new turn; tool results and injected meta don't.
+      const prompt =
+        !e.isMeta &&
+        !result &&
+        (typeof content === 'string' || blocks.some((c) => c?.type === 'text'))
+      if (prompt) {
+        st.turnStartedAt = ts
+        st.toolCount = 0
+        // An interrupted turn leaves calls that will never get a result.
+        for (const call of st.pending.values()) call.running = false
+        st.pending.clear()
+      }
       break
     }
     case 'ai-title':
@@ -218,6 +335,18 @@ export class Tailer {
       outputTokens: st.outputTokens,
       speed: st.speed,
       lastActivity: st.lastActivity,
+    }
+  }
+
+  activity(sessionId: string): Activity | null {
+    const st = this.states.get(sessionId)
+    if (!st) return null
+    return {
+      tool: st.lastTool ? { ...st.lastTool } : null,
+      text: st.text,
+      textAt: st.textAt,
+      turnStartedAt: st.turnStartedAt,
+      toolCount: st.toolCount,
     }
   }
 

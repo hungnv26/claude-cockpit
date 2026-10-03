@@ -23,6 +23,28 @@ export interface ContextBreakdown {
   estimatedAt: number
 }
 
+export interface ToolActivity {
+  name: string
+  detail: string | null
+  startedAt: number
+  running: boolean
+}
+
+export interface Activity {
+  tool: ToolActivity | null
+  text: string | null
+  textAt: number | null
+  turnStartedAt: number | null
+  toolCount: number
+}
+
+export interface Pace {
+  ratePerHour: number
+  basis: 'recent' | 'window'
+  hitsAt: number | null
+  atReset: number | null
+}
+
 export interface SessionView {
   pid: number
   sessionId: string
@@ -32,11 +54,14 @@ export interface SessionView {
   entrypoint: string
   kind: string
   name: string | null
+  status: string | null
+  statusSince: number | null
   alive: boolean
   transcriptPath: string | null
   title: string | null
   usage: UsageSnapshot | null
   context: ContextBreakdown | null
+  activity: Activity | null
   attention: Attention
 }
 
@@ -55,6 +80,9 @@ export interface UsageLimit {
   utilization: number
   resetsAt: string | null
   severity: string
+  windowStart: number | null
+  history: [number, number][]
+  pace: Pace | null
 }
 
 export interface LimitsView {

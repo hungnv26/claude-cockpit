@@ -5,3 +5,5 @@ dist/
 .cockpit-agent-settings.json
 service/cockpit.log
 service/cockpit.err
+.cockpit-usage.json
+.cockpit-usage.json.tmp

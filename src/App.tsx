@@ -4,6 +4,8 @@ import { Density } from './components/Density.tsx'
 import { LimitsHero } from './components/LimitsHero.tsx'
 import { StatusBar, type Focus } from './components/StatusBar.tsx'
 import { Console } from './components/Console.tsx'
+import { NowPanel } from './components/NowPanel.tsx'
+import { PacePanel } from './components/PacePanel.tsx'
 import { Permissions } from './components/Permissions.tsx'
 import { beep, unlockAudio } from './alert.ts'
 import { useCockpit } from './ws.ts'
@@ -206,9 +208,11 @@ export function App() {
               </div>
             )}
           </div>
+          <NowPanel session={focusSession ?? null} now={now} block />
+          <PacePanel limits={limits} now={now} block />
         </div>
       ) : (
-        // Landscape: gauges over the session list; context lives in the footer.
+        // Landscape: gauges over [sessions | now + pace]; context lives in the footer.
         <div className="flex-1 flex flex-col min-h-0">
           <LimitsHero limits={limits} now={now} />
           <div className="flex-1 flex min-h-0 border-t border-ink-line">
@@ -225,6 +229,10 @@ export function App() {
                 </div>
               )}
             </main>
+            <aside className="w-72 shrink-0 border-l border-ink-line flex flex-col min-h-0 overflow-y-auto">
+              <NowPanel session={focusSession ?? null} now={now} />
+              <PacePanel limits={limits} now={now} />
+            </aside>
           </div>
         </div>
       )}

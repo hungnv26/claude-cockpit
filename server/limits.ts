@@ -1,6 +1,11 @@
 import fs from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getToken, OAUTH_BETA } from './credential.ts'
-import type { LimitsView, UsageLimit } from './types.ts'
+import type { LimitsView, Pace, UsageLimit } from './types.ts'
+
+/** The API's view of a limit, before history and pace are attached. */
+type BaseLimit = Omit<UsageLimit, 'windowStart' | 'history' | 'pace'>
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 
@@ -27,9 +32,9 @@ function rank(l: any): number {
  * Fable limit shows up. Top-level five_hour/seven_day are a fallback for shape
  * changes.
  */
-function parseLimits(data: any): UsageLimit[] {
+function parseLimits(data: any): BaseLimit[] {
   const arr = Array.isArray(data?.limits) ? data.limits : []
-  const out: UsageLimit[] = []
+  const out: BaseLimit[] = []
   for (const l of arr) {
     if (typeof l?.percent !== 'number') continue
     out.push({
@@ -64,6 +69,102 @@ function parseLimits(data: any): UsageLimit[] {
   return out
 }
 
+const HOUR = 60 * 60 * 1000
+/** Session limits roll every 5 hours; everything else here is weekly. */
+const windowMs = (key: string) => (key.startsWith('session') ? 5 * HOUR : 7 * 24 * HOUR)
+/** "Recent" pace looks back this far — long enough to smooth whole-percent steps. */
+const lookbackMs = (key: string) => (key.startsWith('session') ? HOUR : 24 * HOUR)
+/** A recent slope needs at least this much history behind it to be trusted. */
+const minSpanMs = (key: string) => (key.startsWith('session') ? 15 * 60 * 1000 : 3 * HOUR)
+/** Keep ~150 samples per window, plus every change. */
+const sampleEveryMs = (key: string) => windowMs(key) / 150
+const SPARK_POINTS = 60
+
+/**
+ * History survives restarts so the sparkline doesn't start over, and the last
+ * good reading is replayed at startup so the gauges don't blank while the
+ * first poll (which the usage endpoint likes to 429) is in flight.
+ */
+const STORE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.cockpit-usage.json')
+/** A replayed reading older than this is too stale to show as current. */
+const REPLAY_MAX_AGE_MS = 30 * 60 * 1000
+
+interface Series {
+  /** resetsAt as ms, rounded to the minute — it identifies the window. */
+  window: number | null
+  samples: [number, number][]
+}
+
+interface Store {
+  fetchedAt: number | null
+  lastGood: BaseLimit[]
+  series: Record<string, Series>
+}
+
+const roundMin = (ms: number) => Math.round(ms / 60_000) * 60_000
+
+function windowEnd(l: BaseLimit): number | null {
+  const t = l.resetsAt ? Date.parse(l.resetsAt) : NaN
+  return Number.isNaN(t) ? null : roundMin(t)
+}
+
+function record(series: Record<string, Series>, l: BaseLimit, now: number): void {
+  const end = windowEnd(l)
+  let s = series[l.key]
+  const last = s?.samples[s.samples.length - 1]
+  // New window: a different reset time, or the value fell (the window rolled).
+  if (!s || s.window !== end || (last && l.utilization < last[1] - 1)) {
+    s = series[l.key] = { window: end, samples: [] }
+  }
+  const prev = s.samples[s.samples.length - 1]
+  const changed = !prev || prev[1] !== l.utilization
+  if (!prev || (changed && now - prev[0] >= 60_000) || now - prev[0] >= sampleEveryMs(l.key)) {
+    s.samples.push([now, l.utilization])
+  }
+}
+
+function downsample(samples: [number, number][], n: number): [number, number][] {
+  if (samples.length <= n) return samples
+  const out: [number, number][] = []
+  for (let i = 0; i < n; i++) out.push(samples[Math.round((i * (samples.length - 1)) / (n - 1))])
+  return out
+}
+
+/**
+ * Prefer the slope over the recent stretch (responds when you speed up or
+ * stop); fall back to the average since the window opened, which needs no
+ * history at all — the window started at 0%.
+ */
+export function paceFor(l: BaseLimit, samples: [number, number][], start: number | null, now: number): Pace | null {
+  const end = windowEnd(l)
+  if (end === null || start === null) return null
+  let ratePerHour: number | null = null
+  let basis: Pace['basis'] = 'recent'
+
+  const from = now - lookbackMs(l.key)
+  const recent = samples.filter(([t]) => t >= from)
+  if (recent.length >= 2) {
+    const [t0, u0] = recent[0]
+    const [t1, u1] = recent[recent.length - 1]
+    if (t1 - t0 >= minSpanMs(l.key)) ratePerHour = ((u1 - u0) / (t1 - t0)) * HOUR
+  }
+  if (ratePerHour === null) {
+    const elapsed = now - start
+    if (elapsed < 5 * 60 * 1000) return null
+    ratePerHour = (l.utilization / elapsed) * HOUR
+    basis = 'window'
+  }
+  ratePerHour = Math.max(0, ratePerHour)
+
+  const hoursLeft = Math.max(0, (end - now) / HOUR)
+  const atReset = l.utilization + ratePerHour * hoursLeft
+  const hitsAt =
+    ratePerHour > 0 && l.utilization < 100 && atReset >= 100
+      ? now + ((100 - l.utilization) / ratePerHour) * HOUR
+      : null
+  return { ratePerHour, basis, hitsAt, atReset }
+}
+
 /**
  * The usage endpoint rate-limits, and has been seen asking for a 50-minute
  * wait. Honour its `retry-after` (capped), falling back to this when absent —
@@ -80,7 +181,8 @@ export class Limits {
     fetchedAt: null,
   }
   /** Last successful read, kept so a transient blip doesn't blank the gauges. */
-  private lastGood: UsageLimit[] = []
+  private lastGood: BaseLimit[] = []
+  private series: Record<string, Series> = {}
   private backoffUntil = 0
   private timer: NodeJS.Timeout | null = null
 
@@ -89,6 +191,9 @@ export class Limits {
   }
 
   start(onChange: () => void): void {
+    void this.load().then((replayed) => {
+      if (replayed) onChange()
+    })
     const tick = () =>
       void this.refresh().then((changed) => {
         if (changed) onChange()
@@ -99,6 +204,50 @@ export class Limits {
 
   stop(): void {
     if (this.timer) clearInterval(this.timer)
+  }
+
+  private async load(): Promise<boolean> {
+    try {
+      const store: Store = JSON.parse(await fs.readFile(STORE, 'utf8'))
+      this.series = store.series ?? {}
+      const fresh = store.fetchedAt && Date.now() - store.fetchedAt < REPLAY_MAX_AGE_MS
+      // Only replay if no live reading has landed in the meantime.
+      if (fresh && store.lastGood?.length && this.lastGood.length === 0) {
+        this.lastGood = store.lastGood
+        return this.set({ state: 'ok', detail: null, limits: this.decorate(store.lastGood), fetchedAt: store.fetchedAt })
+      }
+    } catch {
+      /* first run, or unreadable — start empty */
+    }
+    return false
+  }
+
+  private async save(fetchedAt: number): Promise<void> {
+    const store: Store = { fetchedAt, lastGood: this.lastGood, series: this.series }
+    const tmp = `${STORE}.tmp`
+    try {
+      await fs.writeFile(tmp, JSON.stringify(store))
+      await fs.rename(tmp, STORE)
+    } catch {
+      /* history is a nicety; never break polling over it */
+    }
+  }
+
+  /** Attach window start, sparkline history and pace to each API limit. */
+  private decorate(limits: BaseLimit[]): UsageLimit[] {
+    const now = Date.now()
+    return limits.map((l) => {
+      const end = windowEnd(l)
+      const start = end === null ? null : end - windowMs(l.key)
+      const series = this.series[l.key]
+      const samples = series && series.window === end ? series.samples : []
+      return {
+        ...l,
+        windowStart: start,
+        history: downsample(samples, SPARK_POINTS),
+        pace: paceFor(l, samples, start, now),
+      }
+    })
   }
 
   private set(next: LimitsView): boolean {
@@ -119,7 +268,7 @@ export class Limits {
       return this.set({ state: 'error', detail, limits: [], fetchedAt: Date.now() })
     }
     // Slightly stale but valid; a kiosk should keep displaying it.
-    return this.set({ state: 'ok', detail: null, limits: this.lastGood, fetchedAt: this.view.fetchedAt })
+    return this.set({ state: 'ok', detail: null, limits: this.decorate(this.lastGood), fetchedAt: this.view.fetchedAt })
   }
 
   private async refresh(): Promise<boolean> {
@@ -131,7 +280,7 @@ export class Limits {
         const limits = parseLimits(data)
         if (limits.length) {
           this.lastGood = limits
-          return this.set({ state: 'ok', detail: null, limits, fetchedAt: Date.now() })
+          return this.set({ state: 'ok', detail: null, limits: this.decorate(limits), fetchedAt: Date.now() })
         }
       } catch {
         /* unreadable fixture — fall through to the real API */
@@ -173,8 +322,11 @@ export class Limits {
       }
       const limits = parseLimits(await res.json())
       if (limits.length === 0) return this.softFail()
+      const now = Date.now()
+      for (const l of limits) record(this.series, l, now)
       this.lastGood = limits
-      return this.set({ state: 'ok', detail: null, limits, fetchedAt: Date.now() })
+      void this.save(now)
+      return this.set({ state: 'ok', detail: null, limits: this.decorate(limits), fetchedAt: now })
     } catch {
       return this.softFail() // network/timeout — keep the last-good gauges
     }

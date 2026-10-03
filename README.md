@@ -40,6 +40,13 @@ The **monitor** view is a read-only glance board:
   you approach the ceiling.
 - **Live sessions** — every running Claude Code session (including ones started
   by the desktop app), with its model and state.
+- **Now** — what the focused session is doing this second: `running Bash`,
+  `thinking`, `needs approval` or `idle`, with what the tool is acting on (the
+  command, file, pattern…), the last thing Claude wrote, how long the turn has
+  run, and how many tools it has called.
+- **Pace** — for each plan limit, a sparkline of usage across its window with
+  a dashed projection to reset, and the verdict: *≈19% at reset*, or — in
+  amber — *100% ~Wed 1:07 AM* if you'll run out first.
 - **Status footer** — a persistent `LIVE / OFFLINE` indicator, the focused
   session's model, effort and title, and a full-width segmented **context** bar
   in the style of the CLI's own readout: system prompt, tools, MCP tools,
@@ -62,7 +69,7 @@ tablet on landscape — then remembers your choice.
 | | iPad (landscape) | iPhone (portrait) |
 |---|---|---|
 | Gauges | full size, in a row | smaller, three across |
-| Body | the session list, full width | the session list |
+| Body | sessions ∣ now + pace, side by side | stacked: sessions, now, pace |
 | Sessions | all of them | the 2 most recent, to keep the column short |
 | Width | fills the screen | a phone-width column, centred on wider screens |
 
@@ -104,6 +111,16 @@ and (optionally) drives new sessions it spawns itself. There are two planes:
 - **Plan usage** — fetches your limits from the Claude usage API using the OAuth
   token in your macOS Keychain, and **auto-refreshes** it so the panel never goes
   stale (see Design notes).
+- **Activity** — busy/idle comes from the `status` field Claude Code keeps in
+  each session's registry file (its timestamp marks when the turn began); the
+  current tool, its target and the latest prose come from the transcript
+  tail, matching each `tool_use` to its `tool_result`.
+- **Pace** — every successful usage poll is recorded per limit, per window,
+  in `.cockpit-usage.json`, so history survives restarts. The forecast uses
+  the slope over the last hour (5-hour limit) or day (weekly), and falls back
+  to the average since the window opened — which needs no history at all,
+  since every window starts at 0%. The last good reading is also replayed at
+  startup, so the gauges don't blank while the first poll is in flight.
 - **Context window** — the current context vs. the model's real window, pulled
   live from the Models API (`max_input_tokens`), not a hardcoded number.
 - **Context breakdown** — Claude Code never writes its per-category estimate to
@@ -175,7 +192,7 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
   hub.ts             aggregates all state, coalesces updates, broadcasts
   sessions.ts        watches ~/.claude/sessions registry
   transcript.ts      incremental JSONL tailer for model + token usage
-  limits.ts          plan-usage gauges (5h / 7d / Fable) from the usage API
+  limits.ts          plan-usage gauges (5h / 7d / Fable), history and pace forecast
   credential.ts      Keychain read + self-refreshing OAuth token
   models.ts          live context-window sizes from the Models API
   context.ts         per-cwd `claude -p /context` probe → context breakdown
@@ -185,7 +202,7 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
 
 src/               React + Tailwind frontend
   App.tsx            layout + view switching
-  components/        LimitsHero, StatusBar, ContextBar, SessionCard, Console, …
+  components/        LimitsHero, NowPanel, PacePanel, StatusBar, ContextBar, …
   ws.ts              WebSocket hook + shared types
 
 hooks/             Claude Code hooks that POST to the server

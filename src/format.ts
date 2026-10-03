@@ -53,3 +53,20 @@ export function ago(ts: number | null, now: number): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h`
   return `${Math.floor(s / 86400)}d`
 }
+
+/** Elapsed time, coarse to fine: "8s", "2m 14s", "1h 3m". */
+export function dur(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ${s % 60}s`
+  return `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+/** Wall-clock time, with the weekday when it isn't today: "4:10 PM", "Tue 9:00 AM". */
+export function clock(ts: number, now: number): string {
+  const d = new Date(ts)
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === new Date(now).toDateString()) return time
+  return `${d.toLocaleDateString([], { weekday: 'short' })} ${time}`
+}

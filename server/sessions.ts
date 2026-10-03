@@ -33,6 +33,8 @@ async function readSessionFile(file: string): Promise<SessionMeta | null> {
       entrypoint: d.entrypoint ?? '',
       kind: d.kind ?? '',
       name: d.name ?? null,
+      status: typeof d.status === 'string' ? d.status : null,
+      statusSince: typeof d.statusUpdatedAt === 'number' ? d.statusUpdatedAt : null,
     }
   } catch {
     // Half-written file mid-flush; the watcher will fire again.

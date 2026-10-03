@@ -114,6 +114,7 @@ export class Hub {
           title: this.tailer.title(m.sessionId),
           usage,
           context: this.context.breakdownFor(m, usage),
+          activity: this.tailer.activity(m.sessionId),
           attention: this.events.attentionFor(m.sessionId),
         }
       })
