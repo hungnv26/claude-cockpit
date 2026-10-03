@@ -40,13 +40,11 @@ The **monitor** view is a read-only glance board:
   you approach the ceiling.
 - **Live sessions** — every running Claude Code session (including ones started
   by the desktop app), with its model and state.
-- **Context breakdown** — where the focused session's context window has gone,
-  the way the desktop app's "Context window" popover shows it: messages, MCP
-  tools, system tools, skills, system prompt, with the small rows folded into
-  *Other*, plus the autocompact buffer and free space.
 - **Status footer** — a persistent `LIVE / OFFLINE` indicator, the focused
-  session's model and effort, and a full-width **Context Window** bar showing how
-  full the current context is.
+  session's model, effort and title, and a full-width segmented **context** bar
+  in the style of the CLI's own readout: system prompt, tools, MCP tools,
+  agents, memory files, skills and messages, each with its share, plus free
+  space and a marker where auto-compaction kicks in.
 
 The **console** view turns it into a remote control:
 
@@ -64,8 +62,8 @@ tablet on landscape — then remembers your choice.
 | | iPad (landscape) | iPhone (portrait) |
 |---|---|---|
 | Gauges | full size, in a row | smaller, three across |
-| Body | sessions ∣ context breakdown, side by side | stacked: sessions, then the breakdown |
-| Sessions | all of them | the 2 most recent, so the breakdown stays on screen |
+| Body | the session list, full width | the session list |
+| Sessions | all of them | the 2 most recent, to keep the column short |
 | Width | fills the screen | a phone-width column, centred on wider screens |
 
 Both respect the iOS safe-area insets, so the header clears the notch and the
@@ -109,9 +107,10 @@ and (optionally) drives new sessions it spawns itself. There are two planes:
 - **Context window** — the current context vs. the model's real window, pulled
   live from the Models API (`max_input_tokens`), not a hardcoded number.
 - **Context breakdown** — Claude Code never writes its per-category estimate to
-  disk, so the server asks the CLI: `claude -p /context` in the session's cwd
-  reports the fixed overhead (system prompt, tools, skills, memory, agents) for
-  that project without making an API call. Cached per cwd for 15 minutes.
+  disk, so the server asks the CLI: `claude -p /context` in the session's cwd,
+  with the session's own entrypoint, reports the fixed overhead (system prompt,
+  tools, skills, memory, agents) without making an API call. Cached per
+  cwd + entrypoint for 15 minutes.
   *Messages* is the real token count from the transcript minus that overhead.
 
 ### Control plane (drives sessions the app owns)
@@ -186,7 +185,7 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
 
 src/               React + Tailwind frontend
   App.tsx            layout + view switching
-  components/        LimitsHero, StatusBar, SessionCard, ContextPanel, Console, …
+  components/        LimitsHero, StatusBar, ContextBar, SessionCard, Console, …
   ws.ts              WebSocket hook + shared types
 
 hooks/             Claude Code hooks that POST to the server
@@ -219,9 +218,10 @@ Claude Code actually behaves (each verified against the real CLI, not assumed):
 - **The context breakdown is a probe, not a parse.** The category split lives
   only inside the CLI process, so the server runs `claude -p /context` per cwd
   (about a second, no API call) and deletes the empty transcript it leaves
-  behind. A plain CLI doesn't load the desktop app's extra tools, so the tool
-  rows run a little low for desktop sessions and the difference lands in
-  *Messages* — the total always matches the real count.
+  behind. The entrypoint matters: under launchd's bare environment the CLI
+  defers every system tool and the *tools* row vanishes; run as
+  `claude-desktop` it matches the app's own panel. Whatever the estimate
+  misses lands in *messages*, so the total always matches the real count.
 - **Effort can't be changed live** (`set_model` works as a control request but
   `set_effort` doesn't exist), so the effort control restarts the session with
   `--resume`, which preserves the conversation.

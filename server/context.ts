@@ -14,6 +14,10 @@ import type { ContextBreakdown, ContextItem, UsageSnapshot } from './types.ts'
  *
  * That gives the fixed overhead. The live part — messages — is the difference
  * between the newest turn's real token count and that overhead.
+ *
+ * The probe runs with the session's own CLAUDE_CODE_ENTRYPOINT: tool loading
+ * depends on it (under launchd's bare env every system tool is deferred and the
+ * "System tools" row vanishes; as `claude-desktop` it matches the app's panel).
  */
 const PROBE_TIMEOUT_MS = 30_000
 /** Overhead only moves when settings, MCP servers or memory files change. */
@@ -90,14 +94,24 @@ export function parseProbe(markdown: string): Omit<Probe, 'probedAt' | 'ok'> | n
   return { fixed, autocompact }
 }
 
-async function runProbe(cwd: string): Promise<Omit<Probe, 'probedAt' | 'ok'> | null> {
+/** One probe per distinct (cwd, entrypoint) — both change what gets loaded. */
+export interface ProbeTarget {
+  cwd: string
+  entrypoint: string
+}
+
+const keyOf = (t: ProbeTarget) => `${t.entrypoint}\0${t.cwd}`
+
+async function runProbe(t: ProbeTarget): Promise<Omit<Probe, 'probedAt' | 'ok'> | null> {
+  const env = { ...process.env }
+  if (/^[\w-]+$/.test(t.entrypoint)) env.CLAUDE_CODE_ENTRYPOINT = t.entrypoint
   let stdout: string
   try {
     ;({ stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
       execFile(
         CLAUDE_BIN,
         ['-p', '/context', '--output-format', 'json'],
-        { cwd, timeout: PROBE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+        { cwd: t.cwd, env, timeout: PROBE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
         (err, out) => (err ? reject(err) : resolve({ stdout: String(out) })),
       )
     }))
@@ -125,21 +139,22 @@ async function runProbe(cwd: string): Promise<Omit<Probe, 'probedAt' | 'ok'> | n
 export class ContextProbe {
   private cache = new Map<string, Probe>()
   private inFlight = new Set<string>()
-  private queue: string[] = []
+  private queue: ProbeTarget[] = []
   private running = false
 
   constructor(private onChange: () => void) {}
 
-  /** Make sure every live cwd has a fresh probe; kicks off missing ones. */
-  ensure(cwds: Iterable<string>): void {
+  /** Make sure every live target has a fresh probe; kicks off missing ones. */
+  ensure(targets: Iterable<ProbeTarget>): void {
     const now = Date.now()
-    for (const cwd of new Set(cwds)) {
-      const p = this.cache.get(cwd)
+    for (const t of targets) {
+      const key = keyOf(t)
+      const p = this.cache.get(key)
       const ttl = p?.ok ? PROBE_TTL_MS : PROBE_RETRY_MS
       if (p && now - p.probedAt < ttl) continue
-      if (this.inFlight.has(cwd)) continue
-      this.inFlight.add(cwd)
-      this.queue.push(cwd)
+      if (this.inFlight.has(key)) continue
+      this.inFlight.add(key)
+      this.queue.push(t)
     }
     void this.drain()
   }
@@ -150,17 +165,18 @@ export class ContextProbe {
     this.running = true
     try {
       while (this.queue.length > 0) {
-        const cwd = this.queue.shift()!
-        const result = await runProbe(cwd)
-        const prev = this.cache.get(cwd)
+        const t = this.queue.shift()!
+        const key = keyOf(t)
+        const result = await runProbe(t)
+        const prev = this.cache.get(key)
         this.cache.set(
-          cwd,
+          key,
           result
             ? { ...result, probedAt: Date.now(), ok: true }
             : // Keep the last good numbers through a failed retry.
               { fixed: prev?.fixed ?? [], autocompact: prev?.autocompact ?? 0, probedAt: Date.now(), ok: false },
         )
-        this.inFlight.delete(cwd)
+        this.inFlight.delete(key)
         if (result) this.onChange()
       }
     } finally {
@@ -168,8 +184,8 @@ export class ContextProbe {
     }
   }
 
-  breakdownFor(cwd: string, usage: UsageSnapshot | null): ContextBreakdown | null {
-    const p = this.cache.get(cwd)
+  breakdownFor(t: ProbeTarget, usage: UsageSnapshot | null): ContextBreakdown | null {
+    const p = this.cache.get(keyOf(t))
     if (!p || p.fixed.length === 0 || !usage) return null
     const overhead = p.fixed.reduce((n, i) => n + i.tokens, 0)
     // The newest turn's usage is the real count; whatever the fixed estimate

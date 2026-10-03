@@ -3,7 +3,6 @@ import { SessionCard } from './components/SessionCard.tsx'
 import { Density } from './components/Density.tsx'
 import { LimitsHero } from './components/LimitsHero.tsx'
 import { StatusBar, type Focus } from './components/StatusBar.tsx'
-import { ContextPanel } from './components/ContextPanel.tsx'
 import { Console } from './components/Console.tsx'
 import { Permissions } from './components/Permissions.tsx'
 import { beep, unlockAudio } from './alert.ts'
@@ -26,7 +25,7 @@ type View = 'monitor' | 'console'
 const LAYOUT_KEY = 'cockpit.layout'
 type Layout = 'ipad' | 'iphone'
 
-/** Portrait stacks everything, so cap the session list to leave room for the context panel. */
+/** Portrait stacks everything, so cap the session list to keep the column short. */
 const PORTRAIT_SESSIONS = 2
 
 export function App() {
@@ -93,7 +92,14 @@ export function App() {
   const focus: Focus | null =
     view === 'console'
       ? focusAgent
-        ? { model: focusAgent.model, effort: focusAgent.effort, contextTokens: null, contextLimit: null }
+        ? {
+            model: focusAgent.model,
+            effort: focusAgent.effort,
+            contextTokens: null,
+            contextLimit: null,
+            context: null,
+            title: null,
+          }
         : null
       : focusSession?.usage
         ? {
@@ -101,6 +107,8 @@ export function App() {
             effort: null,
             contextTokens: focusSession.usage.contextTokens,
             contextLimit: focusSession.usage.contextLimit,
+            context: focusSession.context,
+            title: focusSession.title ?? focusSession.name,
           }
         : null
 
@@ -186,7 +194,7 @@ export function App() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {/* Only the 2 most recent, so the context panel still fits on screen. */}
+                {/* Only the 2 most recent, so the column stays short. */}
                 {sessions.slice(0, PORTRAIT_SESSIONS).map((s) => (
                   <SessionCard key={s.sessionId} session={s} now={now} compact />
                 ))}
@@ -198,10 +206,9 @@ export function App() {
               </div>
             )}
           </div>
-          <ContextPanel session={focusSession ?? null} block />
         </div>
       ) : (
-        // Landscape: gauges over a two-column [sessions | context breakdown].
+        // Landscape: gauges over the session list; context lives in the footer.
         <div className="flex-1 flex flex-col min-h-0">
           <LimitsHero limits={limits} now={now} />
           <div className="flex-1 flex min-h-0 border-t border-ink-line">
@@ -218,7 +225,6 @@ export function App() {
                 </div>
               )}
             </main>
-            <ContextPanel session={focusSession ?? null} />
           </div>
         </div>
       )}

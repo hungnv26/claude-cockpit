@@ -1,5 +1,6 @@
 const LABELS: Record<string, string> = {
   'claude-fable-5-1': 'Fable 5.1',
+  'claude-opus-5-5': 'Opus 5.5',
   'claude-opus-5': 'Opus 5',
   'claude-opus-4-8': 'Opus 4.8',
   'claude-opus-4-7': 'Opus 4.7',
@@ -17,9 +18,11 @@ export function modelLabel(model: string | null): string {
   return long ? `${label} 1M` : label
 }
 
+/** Matches the Claude Code CLI: 744, 3.4k, 186k, 1M, 1.25M. */
 export function tokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(2))}M`
+  if (n >= 10_000) return `${Math.round(n / 1_000)}k`
+  if (n >= 1_000) return `${Number((n / 1_000).toFixed(1))}k`
   return String(n)
 }
 

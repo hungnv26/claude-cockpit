@@ -102,7 +102,7 @@ export class Hub {
     }
     await Promise.all(live.map((m) => this.tailer.track(m.sessionId)))
     this.events.prune(liveIds)
-    this.context.ensure(live.map((m) => m.cwd))
+    this.context.ensure(live)
 
     this.snapshot = live
       .map((m) => {
@@ -113,7 +113,7 @@ export class Hub {
           transcriptPath: this.tailer.transcriptPath(m.sessionId),
           title: this.tailer.title(m.sessionId),
           usage,
-          context: this.context.breakdownFor(m.cwd, usage),
+          context: this.context.breakdownFor(m, usage),
           attention: this.events.attentionFor(m.sessionId),
         }
       })

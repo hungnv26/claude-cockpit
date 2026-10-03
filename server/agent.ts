@@ -43,22 +43,29 @@ function cmpSemver(a: string, b: string): number {
 
 /**
  * The Claude Desktop app ships a native (arm64) build; the standalone npm CLI may
- * be x86_64 under Rosetta, which warns "CPU lacks AVX support, strange crashes may
- * occur" — so prefer the bundled one. Resolve the newest installed version rather
- * than pinning a version number that breaks on the next update; fall back to
- * whatever `claude` is on PATH.
+ * be x86_64 — which needs Rosetta, and macOS 27 has none ("bad CPU type") — so
+ * prefer the bundled one. Resolve the newest installed version rather than
+ * pinning a version number that breaks on the next update; fall back to whatever
+ * `claude` is on PATH.
+ *
+ * The bundle has lived at both `<version>/claude.app` and, since 2.1.28x,
+ * `<version>/<build-hash>/claude.app`; check both.
  */
 function resolveClaudeBin(): string {
   if (process.env.COCKPIT_CLAUDE_BIN) return process.env.COCKPIT_CLAUDE_BIN
   const base = path.join(os.homedir(), 'Library/Application Support/Claude/claude-code')
+  const inApp = (dir: string) => path.join(dir, 'claude.app/Contents/MacOS/claude')
   try {
     const versions = fs
       .readdirSync(base)
       .filter((v) => /^\d+\.\d+\.\d+$/.test(v))
       .sort(cmpSemver)
     for (const v of versions) {
-      const bin = path.join(base, v, 'claude.app/Contents/MacOS/claude')
-      if (fs.existsSync(bin)) return bin
+      const dir = path.join(base, v)
+      if (fs.existsSync(inApp(dir))) return inApp(dir)
+      for (const sub of fs.readdirSync(dir)) {
+        if (fs.existsSync(inApp(path.join(dir, sub)))) return inApp(path.join(dir, sub))
+      }
     }
   } catch {
     /* not installed here — fall through */
