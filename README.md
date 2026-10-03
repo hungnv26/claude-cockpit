@@ -210,6 +210,10 @@ hooks/             Claude Code hooks that POST to the server
   permission.mjs     PreToolUse → iPad allow/deny
 
 service/           launchd launcher (run.sh) + logs
+
+scripts/screenshots/   `pnpm screenshots` → regenerates docs/*.PNG
+  make-demo.mjs      neutral sample sessions + usage fixture (never the live board)
+  cdp-shot.mjs       device-emulated capture via headless Chrome
 ```
 
 ---
