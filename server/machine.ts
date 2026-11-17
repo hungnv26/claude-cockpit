@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { statfs, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -61,6 +62,16 @@ export class Machine {
   private lastHistory = 0
 
   start(onChange: () => void): void {
+    // Offline/demo hook: show saved readings instead of this Mac's own.
+    const fixture = process.env.COCKPIT_MACHINE_FIXTURE
+    if (fixture) {
+      try {
+        this.view = JSON.parse(readFileSync(fixture, 'utf8'))
+        return
+      } catch {
+        /* unreadable fixture: fall through to live readings */
+      }
+    }
     const tick = async () => {
       await Promise.all([this.readCpu(), this.readGpu(), this.readRam()])
       this.record()

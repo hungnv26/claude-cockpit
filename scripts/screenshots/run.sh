@@ -1,6 +1,6 @@
 #!/bin/sh
 # Regenerates docs/ipad.PNG and docs/iphone.PNG from a throwaway demo instance:
-# neutral sample sessions and a usage fixture, never the live board — the
+# neutral sample sessions, usage and machine fixtures, never the live board — the
 # screenshots go in a public README. Needs Google Chrome (or CHROME=<path>),
 # and `pnpm build` first so the demo serves the current UI.
 set -e
@@ -14,6 +14,7 @@ node $HERE/make-demo.mjs "$TMP"
 
 NODE_ENV=production COCKPIT_PORT=$PORT COCKPIT_TOKEN=demo \
   CLAUDE_COCKPIT_DIR="$TMP/claude" COCKPIT_USAGE_FIXTURE="$TMP/usage.json" \
+  COCKPIT_MACHINE_FIXTURE="$TMP/machine.json" \
   node_modules/.bin/tsx server/index.ts >"$TMP/server.log" 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null; rm -rf "$TMP"' EXIT

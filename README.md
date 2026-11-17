@@ -10,9 +10,9 @@
 
 **A wall-mounted status board for [Claude Code](https://claude.com/claude-code).**
 Runs on a spare iPad or iPhone next to your desk and shows — at a glance — how much
-of your usage limits you've burned, what your live sessions are doing, and whether
-you're about to hit a wall. It can also *drive* Claude Code sessions, not just
-watch them.
+of your usage limits you've burned, what your live sessions are doing, whether
+you're about to hit a wall, and how hard the Mac underneath is working. It can
+also *drive* Claude Code sessions, not just watch them.
 
 ![Claude Cockpit on an iPad Mini 4, landscape](docs/ipad.PNG)
 
@@ -33,11 +33,12 @@ watch them.
 
 ## What it shows
 
-The **monitor** view is a read-only glance board:
+The **monitor** view is a read-only glance board in two halves — Claude on the
+left, the Mac it runs on to the right:
 
 - **Usage gauges** — your rolling **5-hour** and **7-day** plan limits, plus a
-  model-scoped **Fable** gauge, each with a live reset countdown. Turn amber as
-  you approach the ceiling.
+  model-scoped **Fable** gauge (in amber, to set it apart), each with a live
+  reset countdown. Turn red as you approach the ceiling.
 - **Live sessions** — every running Claude Code session (including ones started
   by the desktop app), with its model and state.
 - **Now** — what the focused session is doing this second: `running Bash`,
@@ -46,7 +47,10 @@ The **monitor** view is a read-only glance board:
   run, and how many tools it has called.
 - **Pace** — for each plan limit, a sparkline of usage across its window with
   a dashed projection to reset, and the verdict: *≈19% at reset*, or — in
-  amber — *100% ~Wed 1:07 AM* if you'll run out first.
+  red — *100% ~Wed 1:07 AM* if you'll run out first.
+- **Machine** — the Mac itself: **CPU**, **GPU** and **temperature** gauges,
+  **RAM** and **SSD** bars, and a chart of the last hour. Each metric keeps one
+  colour everywhere it appears, and turns red when it runs hot or full.
 - **Status footer** — a persistent `LIVE / OFFLINE` indicator, the focused
   session's model, effort and title, and a full-width segmented **context** bar
   in the style of the CLI's own readout: system prompt, tools, MCP tools,
@@ -68,8 +72,9 @@ tablet on landscape — then remembers your choice.
 
 | | iPad (landscape) | iPhone (portrait) |
 |---|---|---|
-| Gauges | full size, in a row | smaller, three across |
-| Body | sessions ∣ now + pace, side by side | stacked: sessions, now, pace |
+| Split | two halves: Claude ∣ machine | one column |
+| Gauges | three across the top of each half | three across, slightly smaller |
+| Body | sessions ∣ now + pace under the Claude gauges | stacked: sessions, now, pace, machine |
 | Sessions | all of them | the 2 most recent, to keep the column short |
 | Width | fills the screen | a phone-width column, centred on wider screens |
 
@@ -121,6 +126,11 @@ and (optionally) drives new sessions it spawns itself. There are two planes:
   to the average since the window opened — which needs no history at all,
   since every window starts at 0%. The last good reading is also replayed at
   startup, so the gauges don't blank while the first poll is in flight.
+- **Machine** — CPU from the OS counters, memory from `vm_stat`, GPU
+  utilization from `ioreg`, disk from `statfs`, and temperature from a small
+  Swift helper that reads the same sensors `powermetrics` does. None of it
+  needs admin rights. Sampled every 3 s, with one point per 30 s kept for the
+  last-hour chart (in memory; it starts empty after a restart).
 - **Context window** — the current context vs. the model's real window, pulled
   live from the Models API (`max_input_tokens`), not a hardcoded number.
 - **Context breakdown** — Claude Code never writes its per-category estimate to
@@ -150,7 +160,9 @@ in-page.)
 ## Getting started
 
 **Prerequisites:** macOS, Node.js 20+, [pnpm](https://pnpm.io), and Claude Code
-installed. The usage panel needs a one-time `claude auth login`.
+installed. The usage panel needs a one-time `claude auth login`. The temperature
+gauge needs the Swift compiler (Xcode or its Command Line Tools) — the helper is
+built on first start; without it the gauge shows `—` and everything else works.
 
 ```sh
 pnpm install
@@ -193,6 +205,8 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
   sessions.ts        watches ~/.claude/sessions registry
   transcript.ts      incremental JSONL tailer for model + token usage
   limits.ts          plan-usage gauges (5h / 7d / Fable), history and pace forecast
+  machine.ts         CPU, GPU, RAM, SSD and temperature readings + last-hour history
+  helpers/temp.swift sudo-less temperature sensor reader, built on first start
   credential.ts      Keychain read + self-refreshing OAuth token
   models.ts          live context-window sizes from the Models API
   context.ts         per-cwd `claude -p /context` probe → context breakdown
@@ -202,7 +216,8 @@ server/            Fastify + WebSocket backend (TypeScript, run via tsx)
 
 src/               React + Tailwind frontend
   App.tsx            layout + view switching
-  components/        LimitsHero, NowPanel, PacePanel, StatusBar, ContextBar, …
+  components/        LimitsHero, MachinePanel, NowPanel, PacePanel, StatusBar, ContextBar, …
+  theme.ts           the per-metric colours used in SVG strokes
   ws.ts              WebSocket hook + shared types
 
 hooks/             Claude Code hooks that POST to the server
@@ -212,7 +227,7 @@ hooks/             Claude Code hooks that POST to the server
 service/           launchd launcher (run.sh) + logs
 
 scripts/screenshots/   `pnpm screenshots` → regenerates docs/*.PNG
-  make-demo.mjs      neutral sample sessions + usage fixture (never the live board)
+  make-demo.mjs      neutral sample sessions + usage and machine fixtures (never the live board)
   cdp-shot.mjs       device-emulated capture via headless Chrome
 ```
 
@@ -227,6 +242,18 @@ Claude Code actually behaves (each verified against the real CLI, not assumed):
   iPadOS 15.8. Vite's `build.target` is pinned to `['es2020','safari15']` too.
 - **Touch targets are 44 px in absolute pixels, not `rem`.** A fingertip doesn't
   scale with the font-size control, and a density-scaled button was untappable.
+- **The status bar is opaque, and the header sits below it.** With a
+  translucent bar the system draws over the header and dims it; `black` plus
+  padding of inset *plus* a margin (not `max()` of the two) keeps it clear. The
+  style is read when the home-screen icon is created, so re-add the icon after
+  changing it.
+- **Temperature without sudo.** `powermetrics` needs root. The Swift helper
+  asks the HID sensor services directly and streams one line every few
+  seconds; if Apple changes those private calls it exits and the gauge goes
+  blank rather than taking the server down.
+- **One hue per metric, muted.** Clay stays Claude's colour; CPU, GPU, RAM, SSD
+  and temperature each get their own so a reading is recognisable by colour
+  from across the desk. Red is reserved for "too high".
 - **Updates coalesce at 250 ms** and the DOM is capped — the 2015 A8 can't take a
   socket firing on every token.
 - **The usage token self-refreshes.** Its TTL is 8 h and the refresh token
@@ -259,6 +286,8 @@ Claude Code actually behaves (each verified against the real CLI, not assumed):
 
 - **macOS only** — the usage token lives in the macOS Keychain and the service is
   a launchd agent. Ports would be needed for Linux/Windows.
+- **Machine readings are Apple Silicon-shaped** — the GPU and temperature
+  sources are what an M-series Mac exposes; on other hardware those two show `—`.
 - **Effort shows `—` on the monitor** for desktop sessions — it's set at spawn and
   never written to disk, so an observer genuinely can't know it. It's live in the
   console (where the app chose it).

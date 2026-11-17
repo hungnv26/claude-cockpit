@@ -1,6 +1,7 @@
-// Builds a throwaway ~/.claude lookalike + usage fixture for the README
-// screenshots: three neutral sessions with timestamps relative to now, and plan
-// usage chosen to show every forecast state. Usage: node make-demo.mjs <outDir>
+// Builds a throwaway ~/.claude lookalike + usage and machine fixtures for the
+// README screenshots: three neutral sessions with timestamps relative to now,
+// plan usage chosen to show every forecast state, and an hour of sample machine
+// readings. Usage: node make-demo.mjs <outDir>
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -70,4 +71,25 @@ fs.writeFileSync(path.join(root, 'usage.json'), JSON.stringify({ limits: [
   { kind: 'weekly_all', percent: 62, severity: 'normal', resets_at: iso(r7), scope: null },
   { kind: 'weekly_scoped', percent: 38, severity: 'normal', resets_at: iso(r7), scope: { model: { display_name: 'Fable' } } },
 ] }))
+
+// Machine: a sample Mac under moderate load, with an hour of history that has
+// one busy stretch so all three lines are visible.
+const history = []
+for (let i = 119; i >= 0; i--) {
+  const busy = i > 40 && i < 70
+  const wave = Math.sin(i / 5) * 6 + Math.sin(i / 2.3) * 3
+  history.push([
+    now - i * 30e3,
+    Math.round((busy ? 58 : 16) + wave),
+    Math.round((busy ? 34 : 6) + wave / 2),
+    Math.round((busy ? 61 : 44) + wave / 3),
+  ])
+}
+const last = history[history.length - 1]
+fs.writeFileSync(path.join(root, 'machine.json'), JSON.stringify({
+  model: 'M2 Max', cpu: last[1], gpu: last[2], temp: last[3],
+  ram: { used: 19 * 2 ** 30, total: 32 * 2 ** 30 },
+  disk: { used: 268e9, total: 494e9 },
+  history,
+}))
 console.log('demo ready', root)
