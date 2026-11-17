@@ -7,3 +7,4 @@ service/cockpit.log
 service/cockpit.err
 .cockpit-usage.json
 .cockpit-usage.json.tmp
+.cockpit-temp

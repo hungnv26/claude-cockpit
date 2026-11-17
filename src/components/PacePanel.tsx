@@ -1,4 +1,5 @@
 import { clock } from '../format.ts'
+import { C } from '../theme.ts'
 import type { LimitsView, UsageLimit } from '../ws.ts'
 
 interface Props {
@@ -32,12 +33,12 @@ function Spark({ l, now, hot }: { l: UsageLimit; now: number; hot: boolean }) {
     const [tEnd, uEnd] = p.hitsAt !== null ? [p.hitsAt, 100] : [end, p.atReset ?? l.utilization]
     proj = `${x(now).toFixed(2)},${y(l.utilization).toFixed(2)} ${x(tEnd).toFixed(2)},${y(uEnd).toFixed(2)}`
   }
-  const stroke = hot ? '#d9a441' : '#d97757'
+  const stroke = hot ? C.warn : C.clay
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-5 block">
-      <line x1="0" y1="0.5" x2={W} y2="0.5" stroke="#26262b" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      <line x1="0" y1={H - 0.5} x2={W} y2={H - 0.5} stroke="#26262b" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      <line x1="0" y1="0.5" x2={W} y2="0.5" stroke={C.track} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      <line x1="0" y1={H - 0.5} x2={W} y2={H - 0.5} stroke={C.track} strokeWidth="1" vectorEffect="non-scaling-stroke" />
       {proj && (
         <polyline
           points={proj}

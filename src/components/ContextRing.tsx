@@ -12,13 +12,13 @@ export function ContextRing({ used, limit, solo }: Props) {
   const pct = limit > 0 ? Math.min(1, used / limit) : 0
   const shown = Math.round(pct * 100)
   const hot = pct >= 0.8
-  const stroke = hot ? '#d9a441' : '#d97757'
+  const stroke = hot ? '#e06c6c' : '#d97757'
   const box = solo ? '11rem' : '5rem'
 
   return (
     <div className="relative shrink-0" style={{ width: box, height: box }}>
       <svg viewBox="0 0 80 80" className="w-full h-full">
-        <circle cx="40" cy="40" r={R} fill="none" stroke="#26262b" strokeWidth="7" />
+        <circle cx="40" cy="40" r={R} fill="none" stroke="#2a3242" strokeWidth="7" />
         <circle
           cx="40"
           cy="40"

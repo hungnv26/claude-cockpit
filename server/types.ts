@@ -136,6 +136,20 @@ export interface PendingPermission {
   ts: number
 }
 
+export interface MachineView {
+  /** Chip name, e.g. "M2 Max". */
+  model: string
+  /** Percent, 0–100; null until the first sample (or when unreadable). */
+  cpu: number | null
+  gpu: number | null
+  /** Average CPU die temperature, °C; null without the helper. */
+  temp: number | null
+  ram: { used: number; total: number } | null
+  disk: { used: number; total: number } | null
+  /** [ms, cpu %, gpu %, temp °C] every 30s, an hour deep. */
+  history: [number, number | null, number | null, number | null][]
+}
+
 export type ServerMessage = {
   type: 'snapshot'
   ts: number
@@ -144,4 +158,5 @@ export type ServerMessage = {
   limits: LimitsView
   agents: AgentView[]
   permissions: PendingPermission[]
+  machine: MachineView
 }

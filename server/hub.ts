@@ -6,6 +6,7 @@ import { ModelCatalog } from './models.ts'
 import { AgentRegistry } from './agents.ts'
 import { PermissionBroker } from './permissions.ts'
 import { ContextProbe } from './context.ts'
+import { Machine } from './machine.ts'
 import type { SessionView, ServerMessage } from './types.ts'
 
 /**
@@ -25,6 +26,7 @@ export class Hub {
   readonly agents = new AgentRegistry(() => this.schedule())
   readonly permissions = new PermissionBroker(() => this.broadcast())
   private limits = new Limits()
+  private machine = new Machine()
   private catalog = new ModelCatalog()
   private context = new ContextProbe(() => this.schedule())
   private listeners = new Set<Listener>()
@@ -47,6 +49,7 @@ export class Hub {
     this.stopWatch = watchSessions(() => this.schedule())
     this.poll = setInterval(() => void this.refresh(), LIVENESS_POLL_MS)
     this.limits.start(() => this.broadcast())
+    this.machine.start(() => this.broadcast())
   }
 
   async stop(): Promise<void> {
@@ -54,6 +57,7 @@ export class Hub {
     this.permissions.drain()
     this.agents.stopAll()
     this.limits.stop()
+    this.machine.stop()
     this.catalog.stop()
     if (this.poll) clearInterval(this.poll)
     if (this.pending) clearTimeout(this.pending)
@@ -81,6 +85,7 @@ export class Hub {
       limits: this.limits.current(),
       agents: this.agents.views(),
       permissions: this.permissions.list(),
+      machine: this.machine.current(),
     }
   }
 

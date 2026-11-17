@@ -6,6 +6,7 @@ import { StatusBar, type Focus } from './components/StatusBar.tsx'
 import { Console } from './components/Console.tsx'
 import { NowPanel } from './components/NowPanel.tsx'
 import { PacePanel } from './components/PacePanel.tsx'
+import { MachinePanel } from './components/MachinePanel.tsx'
 import { Permissions } from './components/Permissions.tsx'
 import { beep, unlockAudio } from './alert.ts'
 import { useCockpit } from './ws.ts'
@@ -31,7 +32,7 @@ type Layout = 'ipad' | 'iphone'
 const PORTRAIT_SESSIONS = 2
 
 export function App() {
-  const { sessions, agents, permissions, limits, connected, authError } = useCockpit()
+  const { sessions, agents, permissions, limits, machine, connected, authError } = useCockpit()
   const now = useClock(1000)
   const [sound, setSound] = useState(() => localStorage.getItem(SOUND_KEY) === '1')
   const [view, setView] = useState<View>(
@@ -122,7 +123,9 @@ export function App() {
     >
       <header
         className="flex items-center justify-between gap-x-3 gap-y-1 flex-wrap px-3 pb-2 border-b border-ink-line shrink-0"
-        style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}
+        // Add to the inset rather than max() with it: the system status bar
+        // must never sit on top of the header row.
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
         <div className="flex items-baseline gap-2">
           <h1 className="text-base">Cockpit</h1>
@@ -210,30 +213,36 @@ export function App() {
           </div>
           <NowPanel session={focusSession ?? null} now={now} block />
           <PacePanel limits={limits} now={now} block />
+          <MachinePanel machine={machine} block compact />
         </div>
       ) : (
-        // Landscape: gauges over [sessions | now + pace]; context lives in the footer.
-        <div className="flex-1 flex flex-col min-h-0">
-          <LimitsHero limits={limits} now={now} />
-          <div className="flex-1 flex min-h-0 border-t border-ink-line">
-            <main className="flex-1 p-3 overflow-y-auto">
-              {sessions.length === 0 ? (
-                <p className="text-ink-faint text-sm">
-                  {connected ? 'No live Claude Code sessions.' : 'Connecting…'}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {sessions.map((s) => (
-                    <SessionCard key={s.sessionId} session={s} now={now} compact />
-                  ))}
-                </div>
-              )}
-            </main>
-            <aside className="w-72 shrink-0 border-l border-ink-line flex flex-col min-h-0 overflow-y-auto">
-              <NowPanel session={focusSession ?? null} now={now} />
-              <PacePanel limits={limits} now={now} />
-            </aside>
-          </div>
+        // Landscape: two halves. Claude on the left (gauges over sessions | now +
+        // pace), the machine on the right; context lives in the footer.
+        <div className="flex-1 flex min-h-0">
+          <section className="flex-[1.5] min-w-0 flex flex-col min-h-0">
+            <h2 className="text-xs text-accent px-3 pt-2">claude</h2>
+            <LimitsHero limits={limits} now={now} />
+            <div className="flex-1 flex min-h-0 border-t border-ink-line">
+              <main className="flex-1 min-w-0 p-3 overflow-y-auto">
+                {sessions.length === 0 ? (
+                  <p className="text-ink-faint text-sm">
+                    {connected ? 'No live Claude Code sessions.' : 'Connecting…'}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {sessions.map((s) => (
+                      <SessionCard key={s.sessionId} session={s} now={now} compact />
+                    ))}
+                  </div>
+                )}
+              </main>
+              <aside className="w-60 shrink-0 border-l border-ink-line flex flex-col min-h-0 overflow-y-auto">
+                <NowPanel session={focusSession ?? null} now={now} />
+                <PacePanel limits={limits} now={now} />
+              </aside>
+            </div>
+          </section>
+          <MachinePanel machine={machine} />
         </div>
       )}
 

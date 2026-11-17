@@ -1,5 +1,7 @@
 import { until } from '../format.ts'
+import { C } from '../theme.ts'
 import type { LimitsView } from '../ws.ts'
+import { Ring } from './Ring.tsx'
 
 interface Props {
   limits: LimitsView
@@ -7,9 +9,6 @@ interface Props {
   /** Smaller rings so three fit across a portrait phone. */
   compact?: boolean
 }
-
-const R = 40
-const CIRC = 2 * Math.PI * R
 
 function Gauge({
   label,
@@ -26,39 +25,17 @@ function Gauge({
   hot: boolean
   compact?: boolean
 }) {
-  const p = Math.max(0, Math.min(100, pct)) / 100
-  const stroke = hot ? '#d9a441' : '#d97757'
-  const box = compact ? '6rem' : '9rem'
+  // Model-scoped limits get their own hue, on the ring as well as the label.
+  const color = accent ? C.amber : C.clay
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: box, height: box }}>
-        <svg viewBox="0 0 96 96" className="w-full h-full">
-          <circle cx="48" cy="48" r={R} fill="none" stroke="#26262b" strokeWidth="8" />
-          <circle
-            cx="48"
-            cy="48"
-            r={R}
-            fill="none"
-            stroke={stroke}
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={CIRC}
-            strokeDashoffset={CIRC * (1 - p)}
-            transform="rotate(-90 48 48)"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className={`${compact ? 'text-2xl' : 'text-4xl'} tabular-nums ${
-              hot ? 'text-warn' : 'text-ink-text'
-            }`}
-          >
-            {Math.round(pct)}
-            <span className={`text-ink-faint ${compact ? 'text-xs' : 'text-lg'}`}>%</span>
-          </span>
-        </div>
-      </div>
-      <div className={`${compact ? 'text-xs' : 'text-sm'} ${accent ? 'text-accent' : 'text-ink-muted'}`}>
+      <Ring pct={pct} color={hot ? C.warn : color} size={compact ? '6rem' : '6.5rem'}>
+        <span className={`${compact ? 'text-2xl' : 'text-3xl'} tabular-nums ${hot ? 'text-warn' : 'text-ink-text'}`}>
+          {Math.round(pct)}
+          <span className={`text-ink-faint ${compact ? 'text-xs' : 'text-base'}`}>%</span>
+        </span>
+      </Ring>
+      <div className={`${compact ? 'text-xs' : 'text-sm'} ${accent ? 'text-amber' : 'text-ink-muted'}`}>
         {label}
       </div>
       <div className="text-xs text-ink-faint tabular-nums h-4">
@@ -70,7 +47,7 @@ function Gauge({
 
 /**
  * The hero: usage-against-limit is the first thing you want from across the desk,
- * so the gauges lead. Model-scoped limits (Fable) render in accent to stand out
+ * so the gauges lead. Model-scoped limits (Fable) render in amber to stand out
  * from the two headline windows.
  */
 export function LimitsHero({ limits, now, compact }: Props) {
@@ -83,7 +60,7 @@ export function LimitsHero({ limits, now, compact }: Props) {
   }
   const headline = new Set(['5-hour', '7-day'])
   return (
-    <div className={`flex items-start justify-around gap-2 flex-wrap ${compact ? 'py-3' : 'py-4'}`}>
+    <div className={`flex items-start justify-around gap-2 flex-wrap py-3`}>
       {limits.limits.map((l) => (
         <Gauge
           key={l.key}

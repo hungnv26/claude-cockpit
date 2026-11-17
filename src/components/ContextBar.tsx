@@ -29,9 +29,9 @@ const ALIAS: Record<string, string> = {
   'mcp-server-instructions': 'mcp-tools',
 }
 const OTHER = { key: 'other', label: 'other', color: '#6e6e78' }
-const FREE = '#363b4b'
+const FREE = '#343c50'
 /** Past the compaction point — reserved, never filled. */
-const RESERVED = '#1b1b1f'
+const RESERVED = '#1a2030'
 const MARKER = '#dcc56c'
 const OK = '#5fae6e'
 
@@ -78,7 +78,7 @@ export function ContextBar({ used, limit, context, compact }: Props) {
           )}
           <span
             className="px-1.5 rounded text-ink-bg"
-            style={{ backgroundColor: hot ? '#d9a441' : OK }}
+            style={{ backgroundColor: hot ? '#e06c6c' : OK }}
           >
             {Math.round(share * 100)}%
           </span>

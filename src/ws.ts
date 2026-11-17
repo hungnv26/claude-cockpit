@@ -92,6 +92,16 @@ export interface LimitsView {
   fetchedAt: number | null
 }
 
+export interface MachineView {
+  model: string
+  cpu: number | null
+  gpu: number | null
+  temp: number | null
+  ram: { used: number; total: number } | null
+  disk: { used: number; total: number } | null
+  history: [number, number | null, number | null, number | null][]
+}
+
 export interface PendingPermission {
   id: string
   sessionId: string | null
@@ -157,6 +167,7 @@ export function useCockpit() {
   const [permissions, setPermissions] = useState<PendingPermission[]>([])
   const [events, setEvents] = useState<CockpitEvent[]>([])
   const [limits, setLimits] = useState<LimitsView>(EMPTY_LIMITS)
+  const [machine, setMachine] = useState<MachineView | null>(null)
   const [updatedAt, setUpdatedAt] = useState(0)
   const [connected, setConnected] = useState(false)
   const [authError, setAuthError] = useState(false)
@@ -190,6 +201,7 @@ export function useCockpit() {
           setPermissions(msg.permissions ?? [])
           setEvents(msg.events ?? [])
           setLimits(msg.limits ?? EMPTY_LIMITS)
+          setMachine(msg.machine ?? null)
           setUpdatedAt(msg.ts ?? Date.now())
         } catch {
           /* ignore malformed frame */
@@ -217,5 +229,5 @@ export function useCockpit() {
     }
   }, [])
 
-  return { sessions, agents, permissions, events, limits, updatedAt, connected, authError }
+  return { sessions, agents, permissions, events, limits, machine, updatedAt, connected, authError }
 }
