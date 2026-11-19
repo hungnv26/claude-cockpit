@@ -39,8 +39,8 @@ export function StatusBar({ connected, focus, compact }: Props) {
 
   return (
     <div
-      className="border-t border-ink-line px-4 pt-3 flex flex-col gap-3 shrink-0"
-      style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      className="border-t border-ink-line px-4 pt-2 flex flex-col gap-2 shrink-0"
+      style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
     >
       <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-base min-w-0">
         <span className="flex items-center gap-2 shrink-0">

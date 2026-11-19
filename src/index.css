@@ -11,6 +11,13 @@
     text-size-adjust: 100%;
   }
 
+  /* The board is one fixed screen; the document itself must never scroll. */
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-ink-bg text-ink-text font-mono;
     -webkit-font-smoothing: antialiased;

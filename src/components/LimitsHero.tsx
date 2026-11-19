@@ -60,7 +60,7 @@ export function LimitsHero({ limits, now, compact }: Props) {
   }
   const headline = new Set(['5-hour', '7-day'])
   return (
-    <div className={`flex items-start justify-around gap-2 flex-wrap py-3`}>
+    <div className={`flex items-start justify-around gap-2 flex-wrap py-2`}>
       {limits.limits.map((l) => (
         <Gauge
           key={l.key}

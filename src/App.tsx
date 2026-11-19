@@ -117,7 +117,12 @@ export function App() {
 
   return (
     <div
-      className={`h-screen flex flex-col overflow-hidden ${
+      // Pinned to the visible viewport rather than sized with 100vh: in an iPadOS
+      // home-screen app 100vh can be taller than the window, which pushed the
+      // header under the status bar and the footer off the bottom. A fixed,
+      // opaque layer at the top edge also lets WebKit tint the status bar from it
+      // instead of dimming whatever sits underneath.
+      className={`fixed inset-0 bg-ink-bg flex flex-col overflow-hidden ${
         layout === 'iphone' ? 'max-w-[430px] mx-auto border-x border-ink-line' : ''
       }`}
     >

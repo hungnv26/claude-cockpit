@@ -139,7 +139,7 @@ export function MachinePanel({ machine, block, compact }: Props) {
         <p className="text-xs text-ink-faint px-3 py-2">Waiting for readings…</p>
       ) : (
         <>
-          <div className={`flex items-start justify-around gap-2 ${compact ? 'py-3' : 'py-3'}`}>
+          <div className={`flex items-start justify-around gap-2 py-2`}>
             <Gauge label="cpu" value={m.cpu} unit="%" pct={m.cpu ?? 0} color={C.teal} hot={(m.cpu ?? 0) >= HOT_PCT} compact={compact} />
             <Gauge label="gpu" value={m.gpu} unit="%" pct={m.gpu ?? 0} color={C.violet} hot={(m.gpu ?? 0) >= HOT_PCT} compact={compact} />
             <Gauge label="temp" value={m.temp} unit="°" pct={m.temp ?? 0} color={C.rose} hot={(m.temp ?? 0) >= HOT_TEMP} compact={compact} />
@@ -157,7 +157,7 @@ export function MachinePanel({ machine, block, compact }: Props) {
                 <span style={{ color: C.rose }}>temp</span>
               </span>
             </div>
-            <div className={block ? 'h-16' : 'flex-1 min-h-[3rem] max-h-40'}>
+            <div className={block ? 'h-16' : 'flex-1 min-h-[3rem]'}>
               {m.history.length > 1 ? (
                 <History history={m.history} />
               ) : (

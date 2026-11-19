@@ -64,7 +64,7 @@ export function ContextBar({ used, limit, context, compact }: Props) {
   const w = (n: number) => `${limit > 0 ? (n / limit) * 100 : 0}%`
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-x-4 gap-y-1 flex-wrap text-base">
         <span className="flex items-baseline gap-2 shrink-0">
           <span className="text-accent text-sm">◆</span>
@@ -85,7 +85,7 @@ export function ContextBar({ used, limit, context, compact }: Props) {
         </span>
       </div>
 
-      <div className="relative flex h-5 rounded overflow-hidden" style={{ backgroundColor: RESERVED }}>
+      <div className="relative flex h-4 rounded overflow-hidden" style={{ backgroundColor: RESERVED }}>
         {rows.map((r) => (
           <span
             key={r.key}
